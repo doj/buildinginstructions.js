@@ -4,12 +4,12 @@
  * @author Lasse Deleuran | c-mt.dk and brickhub.org
  * LDR Specification: http://www.ldraw.org/documentation/ldraw-org-file-format-standards.html
  *
- * Special note about colors. 
- * LDraw ID's are used for identifying colors efficiently. However. An LDraw color has both an ordinary value and an 'edge' value which can be used for rendering. In order to simplify the data model for storing geometries by colors, geometries colored in edge colors have '10.000' added to their ID's. An 'edge' color is thus identified by ID's being >= 10000 and the LDraw ID can be obtained by subtracting 10000.
+ * Special note about colors:
+ * LDraw ID's are used for identifying colors efficiently. However, an LDraw color has both an ordinary value and an 'edge' value which can be used for rendering. In order to simplify the data model for storing geometries by colors, geometries colored in edge colors have '10.000' added to their ID's. An 'edge' color is thus identified by ID's being >= 10000 and the LDraw ID can be obtained by subtracting 10000.
  * This choice is internal to the loader and transparent to code that uses LDRLoader.
  *
- * onLoad is called on completion of loading of all necesasry LDraw files.
- * The optional options object has the following optional parameters:
+ * @param onLoad is called on completion of loading of all necesasry LDraw files.
+ * @param options A LDR.Options object. The optional options object has the following optional parameters:
  * - manager: Three.js loading manager. The default loading manager is used if none is present.
  * - onWarning(warningObj) is called when non-breaking errors are encountered, such as unknown colors and unsupported META commands.
  * - onProgress is called when a sub model has been loaded and will also be used by the manager.
@@ -20,6 +20,7 @@
  * - saveFileLines: Set to 'true' if LDR.Line0, LDR.Line1, ... LDR.Line5-objects should be saved on part types.
  * - idToUrl(id,top) is used to translate an id into a file location. Set this function to fit your own directory structure if needed. A normal LDraw directory has files both under /parts and /p and requires you to search for dat files. You can choose to combine the directories, but this is not considered good practice. The function takes two parameters:
  *  - id is the part id to be translated.
+ *  - top is set to 'true' for top level model files, such as .ldr and .mpd files.
  */
 THREE.LDRLoader = function(onLoad, options) {
     var self = this;
@@ -48,25 +49,23 @@ THREE.LDRLoader = function(onLoad, options) {
     this.saveFileLines = options.saveFileLines || false;
     this.mainModel;
 
-    this.idToUrl = options.idToUrl || function(id) {
-	if(!id.endsWith(".dat")){
-	    return id;
+    this.idToUrl = options.idToUrl || function(id,top) {
+	if (id.toLowerCase().endsWith(".dat")) {
+	    return "ldraw_parts/" + id.toLowerCase();
 	}
-	return "ldraw_parts/"+id.toLowerCase();
+	return id;
     };
 }
 
-/*
+/**
  * Load a ldr/mpd/dat file.
  * For BFC parameters, see: http://www.ldraw.org/article/415.html
  * This function follows the procedure from there to handle BFC.
  *
- * id is the file name to load.
- * top should be set to 'true' for top level model files, such as .ldr and .mpd files.
+ * @param id is the file name to load.
+ * @param top should be set to 'true' for top level model files, such as .ldr and .mpd files.
  */
 THREE.LDRLoader.prototype.load = function(id, top) {
-    if(!top)
-	id = id.toLowerCase();
     var url = this.idToUrl(id, top);
     id = id.replace('\\', '/'); // Sanitize id. 
 
@@ -287,6 +286,7 @@ THREE.LDRLoader.prototype.parse = function(data) {
 		   is("!LPUB") ||
 		   is("!LDCAD") ||
 		   is("!LEOCAD") ||
+		   is("!CMDLINE") ||
 		   is("!CATEGORY")) {
 		    // Ignore well known commands.
 		}
@@ -321,7 +321,7 @@ THREE.LDRLoader.prototype.parse = function(data) {
 	    rotation.set(parts[5],  parts[6],  parts[7], 
 			 parts[8],  parts[9],  parts[10], 
 			 parts[11], parts[12], parts[13]);
-	    var subModelID = parts.slice(14).join(" ").toLowerCase().replace('\\', '/');
+	    var subModelID = parts.slice(14).join(" ").replace('\\', '/');
 	    var subModel = new THREE.LDRPartDescription(colorID, 
 							position, 
 							rotation, 
@@ -716,6 +716,10 @@ THREE.LDRStep.prototype.cleanUp = function(loader, newSteps) {
 
     function handleSubModel(subModelDesc) {
         var subModel = loader.partTypes[subModelDesc.ID];
+	if (! subModel) {
+            console.warn("handleSubModel(" + subModelDesc + "): id=" + subModelDesc.ID + " subModel is not defined");
+	    return;
+	}
         if(subModel.isPart()) {
             parts.push(subModelDesc);
         }
